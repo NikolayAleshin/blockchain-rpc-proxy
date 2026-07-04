@@ -1,0 +1,24 @@
+# Copy to terraform.tfvars and adjust. Do not commit real tfvars.
+
+aws_region  = "eu-central-1"
+name        = "polygon-rpc-proxy"
+environment = "dev"
+owner       = "platform"
+cost_center = "engineering"
+
+# Image tag to deploy (CI sets this to the git SHA).
+image_tag = "latest"
+
+# Cost vs. posture:
+#   enable_nat=false  -> tasks in public subnets, no NAT gateway (cheap; good for review)
+#   enable_nat=true   -> tasks in private subnets behind NAT (production posture)
+enable_nat           = false
+enable_vpc_endpoints = false
+
+# Observability sidecar (ADOT -> X-Ray/CloudWatch). Off by default.
+enable_otel = false
+
+# TLS: set an ACM cert ARN to serve HTTPS (and redirect HTTP->HTTPS). Empty = HTTP only.
+acm_certificate_arn = ""
+
+desired_count = 2

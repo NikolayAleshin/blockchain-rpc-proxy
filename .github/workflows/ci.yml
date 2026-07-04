@@ -85,5 +85,22 @@ jobs:
           curl -sf http://127.0.0.1:8080/healthz
           docker rm -f rpcproxy
 
+  terraform:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+      - name: fmt check
+        run: tofu fmt -check -recursive
+      - name: validate dev env
+        working-directory: deploy/terraform/envs/dev
+        run: |
+          tofu init -backend=false -input=false
+          tofu validate -no-color
+
   # Phase 8 extends the docker job with trivy image scan + syft SBOM (+ push to ECR),
-  # and adds terraform fmt/validate + tflint/tfsec once deploy/terraform lands.
+  # and adds tflint/tfsec to the terraform job.
