@@ -1,25 +1,115 @@
 // Command proxy is the entrypoint for the Polygon JSON-RPC proxy.
 //
-// Phase 0 provides a buildable skeleton. Later phases wire the composition root:
-// config -> upstream transport (resilience) -> httputil.ReverseProxy -> HTTP server,
-// plus health endpoints, middleware, graceful shutdown and (opt-in) observability.
-// See docs/ARCHITECTURE.md and docs/CHECKLIST.md.
+// Composition root: config -> upstream transport -> httputil.ReverseProxy ->
+// router (health + middleware) -> http.Server, with explicit timeouts and
+// graceful shutdown on SIGINT/SIGTERM. Resilience and observability layers are
+// wired in later phases without changing this wiring. See docs/ARCHITECTURE.md.
 package main
 
 import (
-	"fmt"
+	"bytes"
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"blockchain-rpc-proxy/internal/config"
+	"blockchain-rpc-proxy/internal/health"
+	"blockchain-rpc-proxy/internal/httpserver"
+	"blockchain-rpc-proxy/internal/proxy"
 )
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "fatal:", err)
+		slog.Error("fatal", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 }
 
-// run holds real startup logic so main stays a thin error-to-exit-code shim.
 func run() error {
-	// Phase 1+ wires config, proxy, transport and server here.
-	return nil
+	cfg, err := config.Load(os.Getenv)
+	if err != nil {
+		return err
+	}
+	logger := newLogger(cfg.LogLevel)
+	slog.SetDefault(logger)
+
+	// Phase 3 wraps this transport with the resilience RoundTripper chain
+	// (timeout -> breaker? -> retry?); the wiring below does not change.
+	transport := http.DefaultTransport
+
+	rp := proxy.New(cfg, transport, logger)
+	checker := health.NewChecker(upstreamPinger(cfg), cfg.UpstreamTimeout, 2*time.Second)
+	handler := httpserver.New(cfg, rp, checker, logger)
+
+	srv := &http.Server{
+		Addr:              cfg.ListenAddr,
+		Handler:           handler,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		logger.Info("proxy listening",
+			slog.String("addr", cfg.ListenAddr),
+			slog.String("upstream", cfg.UpstreamURL.String()),
+		)
+		errCh <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	case <-ctx.Done():
+		stop() // restore default signal handling for a second Ctrl-C
+		logger.Info("shutdown signal received, draining in-flight requests")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+		return srv.Shutdown(shutdownCtx)
+	}
+}
+
+// newLogger builds a JSON slog logger at the configured level.
+func newLogger(level string) *slog.Logger {
+	var lvl slog.Level
+	if err := lvl.UnmarshalText([]byte(level)); err != nil {
+		lvl = slog.LevelInfo
+	}
+	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lvl}))
+}
+
+// upstreamPinger returns a readiness probe that POSTs a cheap eth_chainId call to
+// the upstream. Any HTTP response (even an error status) means "reachable"; only a
+// transport error means "not ready".
+func upstreamPinger(cfg *config.Config) health.Pinger {
+	client := &http.Client{}
+	body := []byte(`{"jsonrpc":"2.0","id":1,"method":"eth_chainId"}`)
+	target := cfg.UpstreamURL.String()
+	return func(ctx context.Context) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		_ = resp.Body.Close()
+		return nil
+	}
 }
