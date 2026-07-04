@@ -1,0 +1,40 @@
+# Binaries (built binary is /proxy or under bin/; a bare "proxy" would wrongly
+# match the cmd/proxy and internal/proxy source dirs)
+/bin/
+/dist/
+/proxy
+*.exe
+*.out
+
+# Go
+*.test
+*.prof
+coverage.out
+coverage.html
+
+# Env / secrets (never commit real values; .env.example is committed)
+.env
+.env.*
+!.env.example
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+# NOTE: .terraform.lock.hcl IS committed (pins provider versions) — do not ignore it.
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Repo hygiene — planning/AI/local material, not part of the public deliverable
+docs/
+CLAUDE.md
+.claude/
+scratchpad/
