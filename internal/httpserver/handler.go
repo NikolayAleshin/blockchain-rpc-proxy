@@ -27,8 +27,10 @@ func New(cfg *config.Config, rp http.Handler, checker *health.Checker, logger *s
 	mux.HandleFunc("GET /healthz", checker.Live)
 	mux.HandleFunc("GET /readyz", checker.Ready)
 	// Anchor the RPC route to exactly "/"; a non-POST to "/" yields 405 from the
-	// mux, other paths yield 404.
-	mux.Handle("POST /{$}", rpcGuard(cfg, rp))
+	// mux, other paths yield 404. Rate-limiting wraps only the RPC route (not
+	// health), sheds load before the guard/proxy, and is off by default.
+	rpcRoute := middleware.Chain(rpcGuard(cfg, rp), middleware.RateLimit(cfg.RateLimitRPS))
+	mux.Handle("POST /{$}", rpcRoute)
 
 	return middleware.Chain(mux,
 		middleware.Recover(logger),

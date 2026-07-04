@@ -21,6 +21,7 @@ import (
 	"blockchain-rpc-proxy/internal/health"
 	"blockchain-rpc-proxy/internal/httpserver"
 	"blockchain-rpc-proxy/internal/proxy"
+	"blockchain-rpc-proxy/internal/transport"
 )
 
 func main() {
@@ -38,11 +39,10 @@ func run() error {
 	logger := newLogger(cfg.LogLevel)
 	slog.SetDefault(logger)
 
-	// Phase 3 wraps this transport with the resilience RoundTripper chain
-	// (timeout -> breaker? -> retry?); the wiring below does not change.
-	transport := http.DefaultTransport
+	// Resilience chain: breaker? -> retry? -> per-attempt timeout -> base.
+	roundTripper := transport.New(cfg, http.DefaultTransport)
 
-	rp := proxy.New(cfg, transport, logger)
+	rp := proxy.New(cfg, roundTripper, logger)
 	checker := health.NewChecker(upstreamPinger(cfg), cfg.UpstreamTimeout, 2*time.Second)
 	handler := httpserver.New(cfg, rp, checker, logger)
 
