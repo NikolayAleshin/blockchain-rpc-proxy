@@ -68,7 +68,7 @@ locals {
 # --- ECR ---
 resource "aws_ecr_repository" "this" {
   name                 = var.name
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE" # deploy by immutable git-SHA tags
   force_delete         = true
   image_scanning_configuration {
     scan_on_push = true
@@ -131,6 +131,9 @@ resource "aws_iam_role_policy_attachment" "task_xray" {
 }
 
 # --- Security groups ---
+# egress to 0.0.0.0/0 is required (proxy reaches the public upstream, ECR,
+# CloudWatch, telemetry); destination cannot be pinned to a CIDR.
+#trivy:ignore:AWS-0104
 resource "aws_security_group" "alb" {
   name        = "${var.name}-alb-sg"
   description = "ALB ingress"
@@ -151,6 +154,7 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   egress {
+    description = "Allow all outbound (to targets and health checks)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -159,6 +163,8 @@ resource "aws_security_group" "alb" {
   tags = merge(var.tags, { Name = "${var.name}-alb-sg" })
 }
 
+# outbound to 0.0.0.0/0 required for upstream/ECR/telemetry.
+#trivy:ignore:AWS-0104
 resource "aws_security_group" "task" {
   name        = "${var.name}-task-sg"
   description = "Fargate task ingress from the ALB only"
@@ -172,6 +178,7 @@ resource "aws_security_group" "task" {
     security_groups = [aws_security_group.alb.id]
   }
   egress {
+    description = "Allow all outbound (upstream RPC, ECR, CloudWatch, telemetry)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -181,12 +188,15 @@ resource "aws_security_group" "task" {
 }
 
 # --- ALB ---
+# internet-facing is intentional: this is a public RPC proxy.
+#trivy:ignore:AWS-0053
 resource "aws_lb" "this" {
-  name               = "${var.name}-alb"
-  load_balancer_type = "application"
-  subnets            = var.alb_subnet_ids
-  security_groups    = [aws_security_group.alb.id]
-  tags               = var.tags
+  name                       = "${var.name}-alb"
+  load_balancer_type         = "application"
+  subnets                    = var.alb_subnet_ids
+  security_groups            = [aws_security_group.alb.id]
+  drop_invalid_header_fields = true
+  tags                       = var.tags
 }
 
 resource "aws_lb_target_group" "this" {
@@ -208,6 +218,8 @@ resource "aws_lb_target_group" "this" {
   tags = var.tags
 }
 
+# HTTP:80 serves the demo (no domain); with acm_certificate_arn it redirects to HTTPS.
+#trivy:ignore:AWS-0054
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.this.arn
   port              = 80

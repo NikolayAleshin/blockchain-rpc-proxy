@@ -20,11 +20,13 @@ resource "aws_internet_gateway" "this" {
 
 # --- public subnets ---
 resource "aws_subnet" "public" {
-  count                   = length(var.azs)
-  vpc_id                  = aws_vpc.this.id
-  cidr_block              = var.public_subnet_cidrs[count.index]
-  availability_zone       = var.azs[count.index]
-  map_public_ip_on_launch = true
+  count             = length(var.azs)
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = var.public_subnet_cidrs[count.index]
+  availability_zone = var.azs[count.index]
+  # Fargate tasks get a public IP via the service's assign_public_ip, so the subnet
+  # default stays off (avoids auto-assigning public IPs to any future ENIs).
+  map_public_ip_on_launch = false
   tags                    = merge(var.tags, { Name = "${var.name}-public-${var.azs[count.index]}", Tier = "public" })
 }
 
@@ -89,6 +91,8 @@ resource "aws_route_table_association" "private" {
 # --- VPC endpoints (optional) ---
 data "aws_region" "current" {}
 
+# endpoint SG egress (VPC-internal traffic in practice).
+#trivy:ignore:AWS-0104
 resource "aws_security_group" "endpoints" {
   count       = var.enable_vpc_endpoints ? 1 : 0
   name        = "${var.name}-vpce-sg"
@@ -103,6 +107,7 @@ resource "aws_security_group" "endpoints" {
     cidr_blocks = [var.vpc_cidr]
   }
   egress {
+    description = "Allow outbound to VPC endpoints"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"

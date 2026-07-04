@@ -1,0 +1,68 @@
+# Build, scan, push the image to ECR (via GitHub OIDC — no static AWS keys) and
+# roll the ECS service. Runs on version tags or manual dispatch. It is a no-op
+# until the repository variables below are set, so the repo stays green.
+#
+# Required repository variables (Settings -> Secrets and variables -> Actions -> Variables):
+#   AWS_ROLE_ARN     IAM role to assume via OIDC
+#   AWS_REGION       e.g. eu-central-1
+#   ECR_REPOSITORY   e.g. polygon-rpc-proxy-dev
+#   ECS_CLUSTER      e.g. polygon-rpc-proxy-dev
+#   ECS_SERVICE      e.g. polygon-rpc-proxy-dev
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # required for OIDC
+  contents: read
+
+jobs:
+  release:
+    name: Build, scan, push, deploy
+    runs-on: ubuntu-latest
+    if: ${{ vars.AWS_ROLE_ARN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build image (git SHA tag)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+          build-args: VERSION=${{ github.sha }}
+
+      - name: Scan before push (fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      - name: Push image
+        run: docker push ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+
+      - name: Deploy (roll the ECS service to the new image)
+        run: |
+          aws ecs update-service \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --service "${{ vars.ECS_SERVICE }}" \
+            --force-new-deployment >/dev/null
+          aws ecs wait services-stable \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --services "${{ vars.ECS_SERVICE }}"

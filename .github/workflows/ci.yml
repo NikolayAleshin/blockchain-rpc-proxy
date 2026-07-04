@@ -49,7 +49,7 @@ jobs:
         run: go tool cover -func=coverage.out | tail -1
 
   vuln:
-    name: Vulnerability scan
+    name: Vulnerability scan (Go)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,11 +63,12 @@ jobs:
           govulncheck ./...
 
   docker:
-    name: Docker build
+    name: Docker build, scan & SBOM
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+
       - name: build image
         uses: docker/build-push-action@v6
         with:
@@ -76,31 +77,64 @@ jobs:
           load: true
           tags: polygon-rpc-proxy:ci
           build-args: VERSION=${{ github.sha }}
+
       - name: smoke test container
         run: |
           docker run -d --name rpcproxy -p 8080:8080 polygon-rpc-proxy:ci
-          for i in $(seq 1 15); do
-            curl -sf http://127.0.0.1:8080/healthz && break || sleep 1
-          done
+          for i in $(seq 1 15); do curl -sf http://127.0.0.1:8080/healthz && break || sleep 1; done
           curl -sf http://127.0.0.1:8080/healthz
           docker rm -f rpcproxy
 
+      - name: trivy image scan (fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: polygon-rpc-proxy:ci
+          format: table
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      - name: generate SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          image: polygon-rpc-proxy:ci
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
   terraform:
-    name: Terraform validate
+    name: Terraform validate & scan
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: deploy/terraform
     steps:
       - uses: actions/checkout@v4
       - uses: opentofu/setup-opentofu@v1
+
       - name: fmt check
         run: tofu fmt -check -recursive
+        working-directory: deploy/terraform
+
       - name: validate dev env
         working-directory: deploy/terraform/envs/dev
         run: |
           tofu init -backend=false -input=false
           tofu validate -no-color
 
-  # Phase 8 extends the docker job with trivy image scan + syft SBOM (+ push to ECR),
-  # and adds tflint/tfsec to the terraform job.
+      - name: tflint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+      - run: tflint --init && tflint --recursive
+        working-directory: deploy/terraform
+
+      - name: trivy IaC scan (fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: deploy/terraform
+          exit-code: "1"
+          severity: HIGH,CRITICAL
