@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,11 +28,41 @@ import (
 	"blockchain-rpc-proxy/internal/transport"
 )
 
+// version is set at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
+	// `proxy healthcheck` is a shell-free container HEALTHCHECK: it GETs /healthz
+	// on the local listener and exits 0/1. Used by the distroless image.
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(healthcheck())
+	}
 	if err := run(); err != nil {
 		slog.Error("fatal", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+}
+
+// healthcheck returns 0 if the local /healthz endpoint responds 200.
+func healthcheck() int {
+	addr := os.Getenv("LISTEN_ADDR")
+	if addr == "" {
+		addr = ":8080"
+	}
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		port = "8080"
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + port + "/healthz")
+	if err != nil {
+		return 1
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		return 0
+	}
+	return 1
 }
 
 func run() error {
@@ -90,6 +121,7 @@ func run() error {
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("proxy listening",
+			slog.String("version", version),
 			slog.String("addr", cfg.ListenAddr),
 			slog.String("upstream", cfg.UpstreamURL.String()),
 			slog.Bool("tracing", tel.TracingEnabled),

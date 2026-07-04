@@ -1,0 +1,24 @@
+# VCS & CI
+.git
+.github
+.gitignore
+
+# Local / IDE / AI
+.idea
+.vscode
+.env
+.env.*
+CLAUDE.md
+docs
+scratchpad
+
+# Build artifacts & coverage
+bin
+dist
+proxy
+coverage.out
+*.out
+
+# Docs & compose (not needed inside the image)
+*.md
+docker-compose.yaml

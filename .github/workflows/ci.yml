@@ -62,5 +62,28 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
-  # Later phases add: docker build + trivy image scan + syft SBOM,
-  # and terraform fmt/validate + tflint/tfsec once deploy/terraform lands.
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: polygon-rpc-proxy:ci
+          build-args: VERSION=${{ github.sha }}
+      - name: smoke test container
+        run: |
+          docker run -d --name rpcproxy -p 8080:8080 polygon-rpc-proxy:ci
+          for i in $(seq 1 15); do
+            curl -sf http://127.0.0.1:8080/healthz && break || sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/healthz
+          docker rm -f rpcproxy
+
+  # Phase 8 extends the docker job with trivy image scan + syft SBOM (+ push to ECR),
+  # and adds terraform fmt/validate + tflint/tfsec once deploy/terraform lands.
