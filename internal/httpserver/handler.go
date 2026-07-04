@@ -16,27 +16,55 @@ import (
 	"blockchain-rpc-proxy/internal/proxy"
 )
 
+// Option configures optional wiring (observability) without bloating New's
+// signature or coupling httpserver to otel/prometheus/sentry.
+type Option func(*options)
+
+type options struct {
+	globals        []func(http.Handler) http.Handler
+	metricsHandler http.Handler
+}
+
+// WithGlobalMiddleware adds middlewares applied around the whole router, just
+// inside Recover and outside request-id/logging (e.g. tracing, metrics, Sentry).
+// They run in the order given (first = outermost).
+func WithGlobalMiddleware(mws ...func(http.Handler) http.Handler) Option {
+	return func(o *options) { o.globals = append(o.globals, mws...) }
+}
+
+// WithMetricsEndpoint registers h at GET /metrics (nil = not exposed).
+func WithMetricsEndpoint(h http.Handler) Option {
+	return func(o *options) { o.metricsHandler = h }
+}
+
 // New builds the top-level http.Handler. rp is the reverse proxy handler for
 // JSON-RPC calls; checker serves the health endpoints.
-func New(cfg *config.Config, rp http.Handler, checker *health.Checker, logger *slog.Logger) http.Handler {
+func New(cfg *config.Config, rp http.Handler, checker *health.Checker, logger *slog.Logger, opts ...Option) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	var o options
+	for _, opt := range opts {
+		opt(&o)
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", checker.Live)
 	mux.HandleFunc("GET /readyz", checker.Ready)
+	if o.metricsHandler != nil {
+		mux.Handle("GET /metrics", o.metricsHandler)
+	}
 	// Anchor the RPC route to exactly "/"; a non-POST to "/" yields 405 from the
 	// mux, other paths yield 404. Rate-limiting wraps only the RPC route (not
 	// health), sheds load before the guard/proxy, and is off by default.
 	rpcRoute := middleware.Chain(rpcGuard(cfg, rp), middleware.RateLimit(cfg.RateLimitRPS))
 	mux.Handle("POST /{$}", rpcRoute)
 
-	return middleware.Chain(mux,
-		middleware.Recover(logger),
-		middleware.RequestID,
-		middleware.Logging(logger),
-	)
+	// Chain (outer -> inner): Recover -> [globals] -> request-id -> logging -> mux.
+	chain := []func(http.Handler) http.Handler{middleware.Recover(logger)}
+	chain = append(chain, o.globals...)
+	chain = append(chain, middleware.RequestID, middleware.Logging(logger))
+	return middleware.Chain(mux, chain...)
 }
 
 // rpcGuard bounds the request body and validates JSON-RPC framing before
