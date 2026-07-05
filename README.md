@@ -1,7 +1,7 @@
 # blockchain-rpc-proxy
 
 [![CI](https://github.com/NikolayAleshin/blockchain-rpc-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/NikolayAleshin/blockchain-rpc-proxy/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/NikolayAleshin/blockchain-rpc-proxy/graph/badge.svg)](https://codecov.io/gh/NikolayAleshin/blockchain-rpc-proxy)
+[![coverage](https://img.shields.io/badge/coverage-78%25-brightgreen)](#testing)
 [![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 

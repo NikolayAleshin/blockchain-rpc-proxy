@@ -52,11 +52,6 @@ jobs:
           echo "total coverage: ${pct}%"
           awk -v p="$pct" 'BEGIN { exit (p+0 < 70) ? 1 : 0 }' \
             || { echo "::error::coverage ${pct}% is below the 70% threshold"; exit 1; }
-      - name: upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: coverage.out
-          fail_ci_if_error: false
 
   vuln:
     name: Vulnerability scan (Go)
