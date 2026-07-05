@@ -136,6 +136,10 @@ tofu init -backend=false && tofu validate   # validate without cloud
 - `enable_nat=false` (default) runs tasks in public subnets — **no NAT gateway**
   (~$32/mo saved) for a cheap, short-lived review. `enable_nat=true` = private posture.
 
+> The IaC is verified with `tofu validate`, `tflint` and `trivy config` (all green in
+> CI). A live `tofu apply` requires an AWS account and is not run here; the apply →
+> verify → `tofu destroy` flow is documented in [`deploy/terraform/README.md`](deploy/terraform/README.md).
+
 ## Project layout
 
 ```text
