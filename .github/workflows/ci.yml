@@ -16,8 +16,8 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -34,8 +34,8 @@ jobs:
     name: Test & build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -52,8 +52,8 @@ jobs:
     name: Vulnerability scan (Go)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -66,11 +66,11 @@ jobs:
     name: Docker build, scan & SBOM
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
 
       - name: build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
@@ -97,7 +97,7 @@ jobs:
         run: syft polygon-rpc-proxy:ci -o spdx-json=sbom.spdx.json
 
       - name: upload SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: sbom
           path: sbom.spdx.json
@@ -106,8 +106,8 @@ jobs:
     name: Terraform validate & scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: opentofu/setup-opentofu@v1
+      - uses: actions/checkout@v5
+      - uses: opentofu/setup-opentofu@v2
 
       - name: fmt check
         run: tofu fmt -check -recursive
@@ -120,7 +120,7 @@ jobs:
           tofu validate -no-color
 
       - name: tflint
-        uses: terraform-linters/setup-tflint@v4
+        uses: terraform-linters/setup-tflint@v6
         with:
           tflint_version: latest
       - run: tflint --init && tflint --recursive
