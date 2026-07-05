@@ -31,8 +31,7 @@ module "network" {
 module "service" {
   source = "../../modules/ecs-service"
 
-  name        = "${var.name}-${var.environment}"
-  environment = var.environment
+  name = "${var.name}-${var.environment}"
 
   vpc_id         = module.network.vpc_id
   alb_subnet_ids = module.network.public_subnet_ids

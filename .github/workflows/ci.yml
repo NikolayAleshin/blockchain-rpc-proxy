@@ -25,10 +25,10 @@ jobs:
         run: |
           out=$(gofmt -l -s .)
           if [ -n "$out" ]; then echo "unformatted files:"; echo "$out"; echo "run: make fmt"; exit 1; fi
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
+      - name: golangci-lint (v2)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b "$(go env GOPATH)/bin"
+          "$(go env GOPATH)/bin/golangci-lint" run
 
   test:
     name: Test & build
@@ -85,21 +85,16 @@ jobs:
           curl -sf http://127.0.0.1:8080/healthz
           docker rm -f rpcproxy
 
+      - name: install trivy & syft
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
       - name: trivy image scan (fail on HIGH/CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: polygon-rpc-proxy:ci
-          format: table
-          exit-code: "1"
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
+        run: trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed polygon-rpc-proxy:ci
 
       - name: generate SBOM (SPDX)
-        uses: anchore/sbom-action@v0
-        with:
-          image: polygon-rpc-proxy:ci
-          format: spdx-json
-          output-file: sbom.spdx.json
+        run: syft polygon-rpc-proxy:ci -o spdx-json=sbom.spdx.json
 
       - name: upload SBOM
         uses: actions/upload-artifact@v4
@@ -131,10 +126,8 @@ jobs:
       - run: tflint --init && tflint --recursive
         working-directory: deploy/terraform
 
+      - name: install trivy
+        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
       - name: trivy IaC scan (fail on HIGH/CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: config
-          scan-ref: deploy/terraform
-          exit-code: "1"
-          severity: HIGH,CRITICAL
+        run: trivy config --exit-code 1 --severity HIGH,CRITICAL deploy/terraform
