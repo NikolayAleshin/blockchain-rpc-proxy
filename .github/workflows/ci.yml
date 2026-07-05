@@ -45,8 +45,18 @@ jobs:
         run: go build ./...
       - name: test (race + coverage)
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
-      - name: coverage summary
-        run: go tool cover -func=coverage.out | tail -1
+      - name: coverage gate (fail under 70%)
+        run: |
+          go tool cover -func=coverage.out | tail -1
+          pct=$(go tool cover -func=coverage.out | awk '/^total:/ {print $3}' | tr -d '%')
+          echo "total coverage: ${pct}%"
+          awk -v p="$pct" 'BEGIN { exit (p+0 < 70) ? 1 : 0 }' \
+            || { echo "::error::coverage ${pct}% is below the 70% threshold"; exit 1; }
+      - name: upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+          fail_ci_if_error: false
 
   vuln:
     name: Vulnerability scan (Go)

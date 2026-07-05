@@ -1,6 +1,7 @@
 # blockchain-rpc-proxy
 
 [![CI](https://github.com/NikolayAleshin/blockchain-rpc-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/NikolayAleshin/blockchain-rpc-proxy/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/NikolayAleshin/blockchain-rpc-proxy/graph/badge.svg)](https://codecov.io/gh/NikolayAleshin/blockchain-rpc-proxy)
 [![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -12,18 +13,23 @@ client at the proxy URL instead of the upstream — no code changes.
 Built as a take-home: clean architecture, real tests, resilience, observability and
 Terraform IaC to AWS ECS Fargate — **without over-engineering a stateless proxy**.
 
-## Status — all implemented & verified
+## Features
 
-| Area | State |
-|------|-------|
-| Core proxy (`ReverseProxy`, transparent single + batch) + config | ✅ |
-| HTTP server, `/healthz` + `/readyz`, middleware, server timeouts, graceful shutdown | ✅ |
-| Resilience (per-attempt timeout, retry+backoff, circuit breaker, rate limit) | ✅ |
-| Observability — OpenTelemetry traces, Prometheus metrics, Sentry (all **opt-in**) | ✅ |
-| Tests — unit/integration/contract/fuzz + live e2e; core coverage ~90%+ | ✅ |
-| Docker (distroless, non-root, 17.7 MB) + compose | ✅ |
-| Terraform (ECS Fargate + ALB, autoscaling, zero-downtime) | ✅ |
-| CI/CD — lint, race tests, govulncheck, image scan + SBOM, IaC scan, OIDC release | ✅ |
+- **Drop-in JSON-RPC 2.0 proxy** — transparent single + batch passthrough; every
+  upstream method works by construction (no method whitelist).
+- **Resilience** — per-attempt timeout (core) + opt-in retry with backoff, circuit
+  breaker, and rate limiting, as a composable `http.RoundTripper` chain.
+- **Observability (opt-in)** — OpenTelemetry traces, Prometheus metrics, Sentry
+  errors, and `trace_id`-correlated structured logs.
+- **Health & lifecycle** — `/healthz`, `/readyz`, hardened `http.Server` timeouts,
+  graceful shutdown.
+- **Container** — multi-stage build to a distroless, non-root image (~17.7 MB).
+- **Infrastructure as Code** — Terraform/OpenTofu for AWS ECS Fargate + ALB, with
+  autoscaling, zero-downtime rollout, and remote state.
+- **CI/CD** — lint, race tests + coverage, `govulncheck`, image scan + SBOM, IaC
+  scan, and an OIDC-based release pipeline.
+- **Tested** — unit / integration / contract / fuzz, plus a live differential parity
+  test proving the proxy matches the upstream; core coverage ~90%+.
 
 ## Design at a glance
 
