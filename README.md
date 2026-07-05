@@ -152,7 +152,17 @@ Dockerfile, docker-compose.yaml
 Standard-library `testing` + `net/http/httptest`, table-driven, contract tests against
 golden fixtures, and a fuzz target for input classification. Unit/integration tests use
 an in-process fake upstream or a fake `http.RoundTripper` — **no real network**,
-`-race`-clean. A tagged live smoke test hits the real upstream on demand.
+`-race`-clean. Tagged live tests hit the real upstream on demand:
+
+```bash
+go test -tags=e2e ./test/e2e/...   # smoke + differential parity
+```
+
+The **differential parity** test proves no method is dropped or altered: for a method
+from every RPC category (chain, net, web3, blocks, gas, account, sync) it sends the same
+request to the proxy and to the upstream and asserts they match — status, results, and
+even the upstream's own errors (e.g. `-32601` for a method the node doesn't support).
+Because forwarding is transparent, method coverage equals the upstream's by construction.
 
 ## Scope & trade-offs
 

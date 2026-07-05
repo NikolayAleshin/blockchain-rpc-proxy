@@ -76,8 +76,7 @@ func rpcGuard(cfg *config.Config, next http.Handler) http.Handler {
 		r.Body = http.MaxBytesReader(w, r.Body, cfg.MaxBodyBytes)
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			var tooLarge *http.MaxBytesError
-			if errors.As(err, &tooLarge) {
+			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 				proxy.WriteError(w, http.StatusRequestEntityTooLarge, nil, proxy.CodeInvalidRequest, "request body too large")
 				return
 			}
