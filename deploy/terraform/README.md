@@ -62,9 +62,9 @@ curl -s -X POST "http://$(tofu output -raw alb_dns_name)" \
 ## Cost & teardown
 
 - Default `enable_nat=false` runs tasks in public subnets (**no NAT gateway**, saving
-  ~$32/mo) — good for a short-lived review. Set `enable_nat=true` for the private
-  production posture.
-- **Always tear down after review:**
+  ~$32/mo) — good for cheap, non-production environments. Set `enable_nat=true` for
+  the private production posture.
+- **Always tear down when done:**
 
 ```bash
 tofu destroy

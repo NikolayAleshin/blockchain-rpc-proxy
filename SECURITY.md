@@ -9,7 +9,7 @@ within a few business days.
 
 ## Supported versions
 
-This is a take-home project; the `main` branch is the only supported version.
+Only the `main` branch is supported.
 
 ## Security posture
 

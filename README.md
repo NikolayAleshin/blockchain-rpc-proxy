@@ -10,8 +10,8 @@ public Polygon RPC endpoint [`https://polygon.drpc.org`](https://polygon.drpc.or
 and exposes **the same RPC interface** as its upstream. Point any Ethereum/Polygon
 client at the proxy URL instead of the upstream — no code changes.
 
-Built as a take-home: clean architecture, real tests, resilience, observability and
-Terraform IaC to AWS ECS Fargate — **without over-engineering a stateless proxy**.
+Clean architecture, real tests, resilience, observability and Terraform IaC to AWS
+ECS Fargate — **without over-engineering a stateless proxy**.
 
 ## Features
 
@@ -134,7 +134,7 @@ tofu init -backend=false && tofu validate   # validate without cloud
 ```
 
 - `enable_nat=false` (default) runs tasks in public subnets — **no NAT gateway**
-  (~$32/mo saved) for a cheap, short-lived review. `enable_nat=true` = private posture.
+  (~$32/mo saved) for cheap, non-production environments. `enable_nat=true` = private posture.
 
 > The IaC is verified with `tofu validate`, `tflint` and `trivy config` (all green in
 > CI). A live `tofu apply` requires an AWS account and is not run here; the apply →
